@@ -655,6 +655,11 @@ header.page-hero .lede{max-width:44em}
    pages with the map docked in the sidebar. Reuses .filters, .stat-row and
    the chip styles from the shared components above.
    ========================================================================== */
+.rs-top-row{display:grid;grid-template-columns:1fr 1fr;gap:24px;align-items:start;margin-top:44px}
+.rs-top-row .rs-map-card{margin-top:0}
+.rs-top-row .filters{
+  grid-template-columns:1fr;position:static;align-self:start;
+}
 .rs-map-card{
   margin-top:44px;background:var(--card);border:1px solid var(--line);border-radius:var(--radius);
   box-shadow:var(--shadow-soft);overflow:hidden;position:relative;
@@ -665,17 +670,13 @@ header.page-hero .lede{max-width:44em}
   display:flex;flex-wrap:wrap;gap:18px;align-items:center;padding:12px 20px;border-top:1px solid var(--line);
   background:var(--paper);font-family:var(--font-mono);font-size:11px;letter-spacing:.06em;color:var(--ink-soft);
 }
-.rs-legend.mini{gap:12px;padding:10px 14px;font-size:10px}
 .rs-legend .dot{display:inline-block;width:11px;height:11px;border-radius:50%;margin-right:7px;vertical-align:-1px;border:2px solid #fff;box-shadow:0 0 0 1px var(--line-strong)}
 .rs-legend .hint{margin-left:auto;color:var(--ink-faint)}
-.dot.st-completed,.rs-pin.st-completed{background:var(--green)}
-.dot.st-in-progress,.rs-pin.st-in-progress{background:var(--blue)}
-.dot.st-planned,.rs-pin.st-planned{background:var(--purple)}
 
-/* map pins (Leaflet divIcon) */
+/* map pins (Leaflet divIcon) — coloured by project type via --pin-c */
 .rs-di{background:none;border:none}
 .rs-pin{
-  width:18px;height:18px;border-radius:50%;border:2.5px solid #FFFDF8;margin:4px;
+  width:18px;height:18px;border-radius:50%;border:2.5px solid #FFFDF8;margin:4px;background:var(--pin-c,var(--blue));
   box-shadow:0 1px 4px rgba(43,42,37,.35);position:relative;transition:transform .2s;cursor:pointer;
 }
 .rs-pin:hover{transform:scale(1.25)}
@@ -685,12 +686,9 @@ header.page-hero .lede{max-width:44em}
 }
 .rs-pin.sel{transform:scale(1.3)}
 .rs-pin.sel::after{
-  content:"";position:absolute;inset:-9px;border-radius:50%;border:2.5px solid var(--blue);
+  content:"";position:absolute;inset:-9px;border-radius:50%;border:2.5px solid var(--pin-c,var(--blue));
   animation:rs-pulse 1.5s ease-out infinite;
 }
-.rs-pin.st-completed.sel::after{border-color:var(--green)}
-.rs-pin.st-in-progress.sel::after{border-color:var(--blue)}
-.rs-pin.st-planned.sel::after{border-color:var(--purple)}
 @keyframes rs-pulse{0%{transform:scale(.5);opacity:.9}100%{transform:scale(1.5);opacity:0}}
 @media (prefers-reduced-motion:reduce){.rs-pin.sel::after{animation:none;opacity:.7}}
 
@@ -705,30 +703,45 @@ header.page-hero .lede{max-width:44em}
 .rs-pop .pl:hover{text-decoration:underline}
 
 .rs-filters{margin-top:34px}
+.rs-top-row .rs-filters{margin-top:0}
 
-/* ---------- overview: photo-led project tiles ---------- */
-.rs-tiles{display:grid;grid-template-columns:repeat(3,1fr);gap:20px;margin-top:10px}
-.rs-tile{
-  display:flex;flex-direction:column;background:var(--card);border:1px solid var(--line);
-  border-radius:var(--radius);box-shadow:var(--shadow-soft);overflow:hidden;text-decoration:none;color:var(--ink);
-  transition:transform .25s,box-shadow .25s;
+/* ---------- overview: project table, grouped by district ---------- */
+.rs-table-wrap{display:grid;gap:14px;margin-top:10px}
+.rs-dgroup{
+  background:var(--card);border:1px solid var(--line);border-radius:var(--radius);
+  box-shadow:var(--shadow-soft);overflow:hidden;
 }
-.rs-tile:hover{transform:translateY(-4px);box-shadow:var(--shadow)}
-.rs-tile .thumb{
-  position:relative;aspect-ratio:16/9;background:
-    linear-gradient(135deg,color-mix(in srgb,var(--sc,var(--blue)) 14%,var(--paper-2)),var(--paper-3));
-  display:flex;align-items:center;justify-content:center;border-bottom:3px solid var(--sc,var(--blue));
+.rs-dgroup > summary{
+  list-style:none;cursor:pointer;padding:16px 20px;display:flex;align-items:center;gap:12px;
+  user-select:none;
 }
-.rs-tile .thumb img{width:100%;height:100%;object-fit:cover}
-.rs-tile .thumb .ph-ic{width:34px;height:34px;stroke:var(--sci,var(--blue-deep));opacity:.55}
-.rs-tile .thumb .mchip{position:absolute;top:10px;right:10px;background:rgba(255,253,248,.92)}
-.rs-tile .tbody{padding:16px 18px 18px;display:grid;gap:5px}
-.rs-tile .tfac{font-family:var(--font-mono);font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:var(--sci,var(--blue-deep))}
-.rs-tile h3{font-size:17.5px;font-weight:500;line-height:1.25}
-.rs-tile .tloc{font-size:13px;color:var(--ink-soft)}
-.rs-tile .tinv{font-family:var(--font-mono);font-size:11px;color:var(--ink-faint);margin-top:3px}
-@media (max-width:980px){.rs-tiles{grid-template-columns:1fr 1fr}}
-@media (max-width:640px){.rs-tiles{grid-template-columns:1fr}}
+.rs-dgroup > summary::-webkit-details-marker{display:none}
+.rs-dgroup[open] > summary{border-bottom:1px solid var(--line)}
+.rs-dgroup summary .chev{width:15px;height:15px;stroke:var(--ink-faint);flex:none;transition:transform .2s}
+.rs-dgroup[open] summary .chev{transform:rotate(90deg)}
+.rs-dgroup .dg-name{font-size:16px;font-weight:600;color:var(--ink)}
+.rs-dgroup .dg-meta{margin-left:auto;font-family:var(--font-mono);font-size:11.5px;color:var(--ink-faint);white-space:nowrap}
+.rs-table-scroll{overflow-x:auto}
+.rs-table{width:100%;border-collapse:collapse;font-size:13.5px}
+.rs-table thead th{
+  text-align:left;font-family:var(--font-mono);font-size:9.5px;letter-spacing:.08em;text-transform:uppercase;
+  color:var(--ink-faint);padding:8px 20px;background:var(--paper);border-bottom:1px solid var(--line);white-space:nowrap;
+}
+.rs-table td{padding:11px 20px;border-bottom:1px solid var(--line);vertical-align:middle;color:var(--ink-soft)}
+.rs-table tbody tr:last-child td{border-bottom:none}
+.rs-table tbody tr:hover{background:var(--paper-2)}
+.rs-table .rc-type{width:1%}
+.rs-table .rc-name a{color:var(--ink);font-weight:500;text-decoration:none}
+.rs-table .rc-name a:hover{text-decoration:underline}
+.rs-table .rc-inv{text-align:right;font-family:var(--font-mono);font-size:12.5px;white-space:nowrap}
+.type-chip{
+  display:inline-block;font-family:var(--font-mono);font-size:9.5px;font-weight:600;letter-spacing:.04em;
+  color:#fff;padding:3px 9px;border-radius:99px;white-space:nowrap;
+}
+@media (max-width:640px){
+  .rs-dgroup .dg-meta{font-size:10.5px}
+  .rs-table td,.rs-table thead th{padding:10px 12px}
+}
 
 /* ---------- project page ---------- */
 #rs-detail{padding-top:36px}
@@ -763,6 +776,7 @@ header.page-hero .lede{max-width:44em}
 .detail-sub{font-size:15px;color:var(--ink-soft)}
 .detail-head .meta-chips{display:flex;flex-wrap:wrap;gap:7px}
 .detail-head .mchip{font-family:var(--font-mono);font-size:10.5px;letter-spacing:.04em;padding:4px 10px;border-radius:99px;border:1px solid var(--line)}
+.detail-head .mchip.type{background:var(--sc,var(--blue));color:#fff;border-color:transparent;font-weight:600}
 
 /* uniform record — same fields for every project */
 .detail-facts{
@@ -804,8 +818,23 @@ a.ph-slot:hover{background:var(--paper-3)}
 .ba-tag.l{left:10px}.ba-tag.r{right:10px}
 .ba-range{width:100%;accent-color:var(--blue);cursor:ew-resize}
 
+/* prev/next controls for stepping through several before/after pairs */
+.ph-nav{display:flex;align-items:center;justify-content:center;gap:10px;margin-top:10px}
+
+/* plain documentation photo gallery (no before/after comparison) */
+.rs-gallery{display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:10px}
+.rs-gallery-item{
+  display:block;position:relative;aspect-ratio:4/3;border-radius:12px;overflow:hidden;
+  background:var(--paper-3);transition:transform .2s,box-shadow .2s;
+}
+.rs-gallery-item img{width:100%;height:100%;object-fit:cover;display:block}
+.rs-gallery-item:hover{transform:translateY(-2px);box-shadow:var(--shadow-soft)}
+
 @media (max-width:900px){
   #rs-map{height:400px}
+  .rs-top-row{grid-template-columns:1fr}
+  .rs-top-row .rs-map-card{order:1}
+  .rs-top-row .filters{order:2;grid-template-columns:1fr 1fr}
   .detail-cols{grid-template-columns:1fr}
   .detail-side{position:static}
   .detail-facts{grid-template-columns:1fr 1fr}

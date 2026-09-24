@@ -68,8 +68,8 @@
         <div class="lbl">Districts with at least one investment</div>
       </div>
       <div class="stat-card" style="--ac:var(--green)">
-        <span class="tag">Investment</span>
-        <div class="num"><sup>USD&nbsp;</sup><span class="count" id="st-investment" data-target="0">0</span></div>
+        <span class="tag">Investment (USD)</span>
+        <div class="num"><span class="count" id="st-investment" data-target="0">0</span></div>
         <div class="lbl">Total investment recorded to date</div>
       </div>
       <div class="stat-card" style="--ac:var(--cyan)">
@@ -79,39 +79,40 @@
       </div>
     </div>
 
-    <!-- Map (the map element is moved into the project page when one is open) -->
-    <div class="rs-map-card" data-reveal>
-      <div id="map-slot-overview"><div id="rs-map" role="application" aria-label="Map of UNHCR-funded projects in Moldova"></div></div>
-      <div class="rs-legend" aria-hidden="true">
-        <span><i class="dot st-completed"></i>Completed</span>
-        <span><i class="dot st-in-progress"></i>In progress</span>
-        <span><i class="dot st-planned"></i>Planned</span>
-        <span class="hint">Pins with a number group several projects at one site — click a pin to open a project</span>
+    <!-- Filters (left) + map (right, half width) -->
+    <div class="rs-top-row">
+      <!-- Filters: options are generated from the data file -->
+      <div class="filters rs-filters" role="search" aria-label="Filter projects">
+        <label>Keyword search
+          <input type="search" id="f-search" placeholder="e.g. kindergarten, Cahul, playground…" autocomplete="off">
+        </label>
+        <label>Type of Project
+          <select id="f-type"><option value="">All types</option></select>
+        </label>
+        <label>District
+          <select id="f-district"><option value="">All districts</option></select>
+        </label>
+        <label>Municipality
+          <select id="f-municipality"><option value="">All municipalities</option></select>
+        </label>
+        <label>Facility type
+          <select id="f-facility"><option value="">All facility types</option></select>
+        </label>
+        <label>Status
+          <select id="f-status"><option value="">All statuses</option></select>
+        </label>
+        <div class="reset"><button type="button" id="f-reset">Clear filters</button></div>
+      </div>
+
+      <!-- Map (the map element is moved into the project page when one is open) -->
+      <div class="rs-map-card" data-reveal>
+        <div id="map-slot-overview"><div id="rs-map" role="application" aria-label="Map of UNHCR-funded projects in Moldova"></div></div>
+        <div class="rs-legend" id="rs-type-legend" aria-hidden="true"></div>
       </div>
     </div>
 
-    <!-- Filters: options are generated from the data file -->
-    <div class="filters rs-filters" role="search" aria-label="Filter projects">
-      <label>Keyword search
-        <input type="search" id="f-search" placeholder="e.g. kindergarten, Cahul, playground…" autocomplete="off">
-      </label>
-      <label>District
-        <select id="f-district"><option value="">All districts</option></select>
-      </label>
-      <label>Municipality
-        <select id="f-municipality"><option value="">All municipalities</option></select>
-      </label>
-      <label>Facility type
-        <select id="f-facility"><option value="">All facility types</option></select>
-      </label>
-      <label>Status
-        <select id="f-status"><option value="">All statuses</option></select>
-      </label>
-      <div class="reset"><button type="button" id="f-reset">Clear filters</button></div>
-    </div>
-
     <p class="result-count" id="result-count" aria-live="polite"></p>
-    <div class="rs-tiles" id="rs-grid"></div>
+    <div class="rs-table-wrap" id="rs-grid"></div>
 
     <div class="takeaway" data-reveal style="margin-top:44px">
       <p><b>How to use this showcase:</b> filter the gallery, then open any project — or any map pin — to see it on its own page with photographs, the full record and the map alongside. All content loads from <a href="data/results_showcase.csv">data/results_showcase.csv</a> — adding a project is one new row in the master Excel file; see <code>SETUP_RESULTS_SHOWCASE.md</code> for the two-minute workflow.</p>
@@ -145,11 +146,6 @@
       <aside class="detail-side">
         <div class="detail-map-card">
           <div id="map-slot-detail"><!-- the map moves here --></div>
-          <div class="rs-legend mini" aria-hidden="true">
-            <span><i class="dot st-completed"></i>Completed</span>
-            <span><i class="dot st-in-progress"></i>In progress</span>
-            <span><i class="dot st-planned"></i>Planned</span>
-          </div>
         </div>
         <div class="detail-loc" id="detail-loc"><!-- rendered by results.js --></div>
       </aside>

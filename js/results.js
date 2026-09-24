@@ -22,22 +22,18 @@
   var detailLoc = document.getElementById("detail-loc");
   if (!grid || !mapEl || !detailEl) return;
 
-  /* Facility-type accent colours: [bar/tint colour, readable ink colour] */
-  var FACILITY_COLORS = {
-    "Kindergarten":                     ["var(--yellow)", "#8A6208"],
-    "School":                           ["var(--yellow)", "#8A6208"],
-    "Sports facility":                  ["var(--green)",  "#177A54"],
-    "Public urban space":               ["var(--green)",  "#177A54"],
-    "Health facility":                  ["var(--red)",    "#A83E2C"],
-    "Community Service Centre":         ["var(--blue)",   "var(--blue-deep)"],
-    "Refugee Accommodation Centre":     ["var(--purple)", "#5C50B8"],
-    "Specialised accommodation centre": ["var(--purple)", "#5C50B8"],
-    "Dormitory building":               ["var(--purple)", "#5C50B8"],
-    "Public administration building":   ["var(--cyan)",   "#1273A0"],
-    "Cultural facility":                ["var(--brown)",  "#7C3C36"],
-    "Youth centre":                     ["var(--cyan)",   "#1273A0"]
+  /* Project-type accent colours: [bar/tint colour, AAA-contrast ink colour]
+     Taken from the UNHCR Data Visualization Guidelines' 5-category palette
+     (Blue / Yellow / Green / Cyan / Red) with the matching AAA text colours. */
+  var TYPE_COLORS = {
+    "PCP": ["var(--blue)",   "#05568B"],
+    "CSI": ["var(--yellow)", "#684D0B"],
+    "CSC": ["var(--green)",  "#1F5741"],
+    "RAC": ["var(--cyan)",   "#0B5269"],
+    "REF": ["var(--red)",    "#683229"]
   };
-  function facColor(t) { return (FACILITY_COLORS[t] || ["var(--blue)", "var(--blue-deep)"]); }
+  var TYPE_FALLBACK = ["var(--grey)", "#4D4D4D"];
+  function typeColor(t) { return TYPE_COLORS[t] || TYPE_FALLBACK; }
 
   function statusClass(st) {
     return "st-" + (st || "planned").toLowerCase().replace(/[^a-z]+/g, "-");
@@ -65,6 +61,7 @@
 
   var controls = {
     q:        document.getElementById("f-search"),
+    type:     document.getElementById("f-type"),
     district: document.getElementById("f-district"),
     muni:     document.getElementById("f-municipality"),
     facility: document.getElementById("f-facility"),
@@ -83,6 +80,7 @@
   function currentFilters() {
     return {
       q:        controls.q        ? controls.q.value.trim() : "",
+      type:     controls.type     ? controls.type.value : "",
       district: controls.district ? controls.district.value : "",
       muni:     controls.muni     ? controls.muni.value : "",
       facility: controls.facility ? controls.facility.value : "",
@@ -91,12 +89,13 @@
   }
 
   function matches(p, f) {
+    if (f.type && p.project_type !== f.type) return false;
     if (f.district && p.district !== f.district) return false;
     if (f.muni && p.municipality !== f.muni) return false;
     if (f.facility && p.facility_type !== f.facility) return false;
     if (f.status && p.status !== f.status) return false;
     if (f.q) {
-      var hay = (p.project_name + " " + p.project_id + " " + p.district + " " + p.municipality + " " +
+      var hay = (p.project_name + " " + p.project_id + " " + p.project_type + " " + p.district + " " + p.municipality + " " +
                  p.address + " " + p.facility_type + " " + p.ownership + " " + p.scope_of_works + " " +
                  p.impact + " " + p.funding_source + " " + p.implementation_modality).toLowerCase();
       var terms = f.q.toLowerCase().split(/\s+/).filter(Boolean);
@@ -110,7 +109,14 @@
   /* ---------------- photos ---------------- */
   /* Every project shows the same photo module: Before + After, each slot
      being an embedded image, a link-out tile, or a placeholder. When both
-     sides are direct images, the module upgrades to a comparison slider. */
+     sides are direct images, the module upgrades to a comparison slider.
+     A project can have several before/after shots (before_photo/after_photo
+     are "|"-joined lists) — photoState tracks which pair is on screen so
+     the viewer can step through them without leaving the slider. */
+  function photoList(field) { return field ? field.split("|").filter(Boolean) : []; }
+
+  var photoState = { before: [], after: [], idx: 0 };
+
   function photoSlot(url, label, big) {
     if (isImageLink(url)) {
       return '<a class="ph-slot img" href="' + esc(url) + '" target="_blank" rel="noopener">' +
@@ -148,36 +154,120 @@
       photoSlot(b, "Before", big) + photoSlot(a, "After", big) + "</div>";
   }
 
-  /* ---------------- overview tiles ---------------- */
-  function tileThumb(p) {
-    var img = isImageLink(p.after_photo) ? p.after_photo :
-              (isImageLink(p.before_photo) ? p.before_photo : "");
-    if (img) return '<img src="' + esc(img) + '" alt="" loading="lazy">';
-    return '<svg class="ph-ic" viewBox="0 0 24 24" fill="none" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="2"/><circle cx="9" cy="10" r="1.6"/><path d="M21 15l-4.5-4.5L9 18"/></svg>';
+  /* Plain documentation photos (an event, a finished site — no before/after
+     comparison). Shown instead of the before/after module when a project
+     has no before/after photos but does have a folder gallery. */
+  function photoGallery(p) {
+    var urls = p.photos ? p.photos.split("|").filter(Boolean) : [];
+    if (!urls.length) return "";
+    return '<div class="rs-gallery">' +
+      urls.map(function (u) {
+        return '<a class="rs-gallery-item" href="' + esc(u) + '" target="_blank" rel="noopener">' +
+          '<img src="' + esc(u) + '" alt="Project photo" loading="lazy"></a>';
+      }).join("") +
+    "</div>";
   }
 
-  function renderTile(p) {
-    var col = facColor(p.facility_type);
-    return '<a class="rs-tile" href="#project=' + encodeURIComponent(p.project_id) + '" style="--sc:' + col[0] + ";--sci:" + col[1] + '">' +
-      '<div class="thumb">' + tileThumb(p) +
-        '<span class="mchip status ' + statusClass(p.status) + '">' + esc(p.status) + "</span>" +
-      "</div>" +
-      '<div class="tbody">' +
-        '<span class="tfac">' + esc(p.facility_type) + "</span>" +
-        "<h3>" + esc(p.project_name) + "</h3>" +
-        '<span class="tloc">' + esc(p.municipality || p.district) + " · " + esc(p.district) + "</span>" +
-        '<span class="tinv">' + (money(p.total_investment_usd) || "Investment —") + "</span>" +
-      "</div>" +
-    "</a>";
+  var PH_PREV_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg>';
+  var PH_NEXT_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6l6 6-6 6"/></svg>';
+
+  /* Renders the before/after pair currently selected in photoState, plus
+     prev/next controls when there's more than one pair to step through. */
+  function renderPhotoPane() {
+    var total = Math.max(photoState.before.length, photoState.after.length, 1);
+    if (photoState.idx >= total) photoState.idx = 0;
+    var pair = { before_photo: photoState.before[photoState.idx] || "",
+                 after_photo: photoState.after[photoState.idx] || "" };
+    var nav = total > 1 ?
+      '<div class="ph-nav">' +
+        '<button type="button" class="step-btn" id="ph-prev" aria-label="Previous photo pair">' + PH_PREV_ICON + "</button>" +
+        '<span class="step-count">' + (photoState.idx + 1) + " / " + total + "</span>" +
+        '<button type="button" class="step-btn" id="ph-next" aria-label="Next photo pair">' + PH_NEXT_ICON + "</button>" +
+      "</div>" : "";
+    return photoModule(pair, true) + nav;
+  }
+
+  function wirePhotoNav(container) {
+    var total = Math.max(photoState.before.length, photoState.after.length, 1);
+    if (total <= 1) return;
+    var prev = container.querySelector("#ph-prev"), next = container.querySelector("#ph-next");
+    if (prev) prev.addEventListener("click", function () {
+      photoState.idx = (photoState.idx - 1 + total) % total;
+      container.innerHTML = renderPhotoPane();
+      wirePhotoNav(container);
+    });
+    if (next) next.addEventListener("click", function () {
+      photoState.idx = (photoState.idx + 1) % total;
+      container.innerHTML = renderPhotoPane();
+      wirePhotoNav(container);
+    });
+  }
+
+  /* Returns the markup to embed in detailMain.innerHTML. When there's a
+     before/after pair, it's just an empty slot — renderDetail fills it via
+     renderPhotoPane() once the element actually exists in the DOM (needed
+     for the prev/next pair buttons to attach their click handlers). */
+  function photoSection(p) {
+    photoState = { before: photoList(p.before_photo), after: photoList(p.after_photo), idx: 0 };
+    if (photoState.before.length || photoState.after.length) return '<div id="detail-photo"></div>';
+    if (p.photos) return photoGallery(p);
+    return photoModule(p, true); // neither — shows the familiar "pending" placeholders
+  }
+
+  /* ---------------- overview table, grouped by district ---------------- */
+  var CHEV = '<svg class="chev" viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6l6 6-6 6"/></svg>';
+
+  function renderRow(p) {
+    var col = typeColor(p.project_type);
+    return "<tr>" +
+      '<td class="rc-type">' +
+        (p.project_type ? '<span class="type-chip" style="background:' + col[0] + '">' + esc(p.project_type) + "</span>" : "") +
+      "</td>" +
+      '<td class="rc-name"><a href="#project=' + encodeURIComponent(p.project_id) + '">' + esc(p.project_name) + "</a></td>" +
+      "<td>" + orDash(p.facility_type) + "</td>" +
+      "<td>" + orDash(p.municipality) + "</td>" +
+      '<td><span class="mchip status ' + statusClass(p.status) + '">' + orDash(p.status) + "</span></td>" +
+      '<td class="rc-inv">' + (money(p.total_investment_usd) || "—") + "</td>" +
+    "</tr>";
+  }
+
+  function renderGroup(district, list) {
+    var total = list.reduce(function (s, p) { return s + p._inv; }, 0);
+    return '<details class="rs-dgroup" open>' +
+      "<summary>" + CHEV +
+        '<span class="dg-name">' + esc(district || "District not recorded") + "</span>" +
+        '<span class="dg-meta">' + list.length + (list.length === 1 ? " project" : " projects") +
+          (total ? " · " + money(total) : "") + "</span>" +
+      "</summary>" +
+      '<div class="rs-table-scroll"><table class="rs-table">' +
+        "<thead><tr><th></th><th>Project</th><th>Facility type</th><th>Municipality</th><th>Status</th><th>Investment</th></tr></thead>" +
+        "<tbody>" + list.map(renderRow).join("") + "</tbody>" +
+      "</table></div>" +
+    "</details>";
+  }
+
+  function renderTable(list) {
+    var groups = {};
+    list.forEach(function (p) {
+      var d = p.district || "";
+      (groups[d] = groups[d] || []).push(p);
+    });
+    var names = Object.keys(groups).sort(function (a, b) {
+      if (!a) return 1;
+      if (!b) return -1;
+      return a.localeCompare(b);
+    });
+    return names.map(function (d) { return renderGroup(d, groups[d]); }).join("");
   }
 
   /* ---------------- project page ---------------- */
   /* Every project renders the exact same record, in the same order —
      empty values show as an em-dash so the structure never changes. */
   function renderDetail(p) {
-    var col = facColor(p.facility_type);
+    var col = typeColor(p.project_type);
     var facts = [
       ["Project ID", p.project_id],
+      ["Type of project", p.project_type],
       ["Facility type", p.facility_type],
       ["Status", p.status],
       ["Ownership", p.ownership],
@@ -190,6 +280,7 @@
     detailMain.innerHTML =
       '<div class="detail-head" style="--sc:' + col[0] + ";--sci:" + col[1] + '">' +
         '<div class="meta-chips">' +
+          (p.project_type ? '<span class="mchip type">' + esc(p.project_type) + "</span>" : "") +
           '<span class="mchip sector">' + esc(p.facility_type) + "</span>" +
           '<span class="mchip status ' + statusClass(p.status) + '">' + esc(p.status) + "</span>" +
         "</div>" +
@@ -197,7 +288,7 @@
         '<p class="detail-sub">' + esc(p.municipality || p.district) + " · " + esc(p.district) +
           (p.address ? " · " + esc(p.address) : "") + "</p>" +
       "</div>" +
-      photoModule(p, true) +
+      photoSection(p) +
       '<div class="detail-facts">' +
         facts.map(function (f) {
           return '<div class="dfact"><span class="k">' + esc(f[0]) + '</span><span class="v">' + orDash(f[1]) + "</span></div>";
@@ -210,6 +301,12 @@
         "<p>" + (p.impact ? esc(p.impact) : "Not yet documented — add it in the master Excel file.") + "</p>" +
         (p.remarks ? "<h2>Remarks</h2><p>" + esc(p.remarks) + "</p>" : "") +
       "</div>";
+
+    var photoEl = document.getElementById("detail-photo");
+    if (photoEl) {
+      photoEl.innerHTML = renderPhotoPane();
+      wirePhotoNav(photoEl);
+    }
 
     detailLoc.innerHTML =
       '<span class="k">Location</span>' +
@@ -224,17 +321,16 @@
   function coordKey(p) { return p._lat.toFixed(5) + "," + p._lon.toFixed(5); }
 
   function markerHtml(group, selected) {
-    var st = statusClass(group.length === 1 ? group[0].status :
-      (group.some(function (p) { return p.status === "In progress"; }) ? "In progress" : group[0].status));
+    var col = typeColor(group[0].project_type)[0];
     var badge = group.length > 1 ? '<span class="n">' + group.length + "</span>" : "";
-    return '<div class="rs-pin ' + st + (selected ? " sel" : "") + '">' + badge + "</div>";
+    return '<div class="rs-pin' + (selected ? " sel" : "") + '" style="--pin-c:' + col + '">' + badge + "</div>";
   }
 
   function popupHtml(group) {
     return '<div class="rs-pop">' + group.map(function (p) {
       return '<div class="pp">' +
         "<b>" + esc(p.project_name) + "</b>" +
-        '<span class="pm">' + esc(p.facility_type) + " · " + esc(p.status) +
+        '<span class="pm">' + esc(p.project_type) + " · " + esc(p.facility_type) + " · " + esc(p.status) +
           (money(p.total_investment_usd) ? " · " + money(p.total_investment_usd) : "") + "</span>" +
         '<a href="#project=' + encodeURIComponent(p.project_id) + '" class="pl">Open project →</a>' +
       "</div>";
@@ -292,7 +388,7 @@
     shownList = projects.filter(function (p) { return matches(p, f); });
 
     if (countEl) countEl.textContent = shownList.length + " of " + projects.length + " projects shown";
-    grid.innerHTML = shownList.length ? shownList.map(renderTile).join("") :
+    grid.innerHTML = shownList.length ? renderTable(shownList) :
       '<div class="empty-state"><b>No projects match the current filters.</b><br>Try clearing a filter or using a broader search term.</div>';
 
     var bounds = drawMarkers(shownList);
@@ -430,12 +526,25 @@
       projects.forEach(function (p) { if (p[key]) set[p[key]] = true; });
       return Object.keys(set).sort();
     }
+    var types = uniq("project_type");
+    fillSelect(controls.type, types, "All types");
     fillSelect(controls.district, uniq("district"), "All districts");
     fillSelect(controls.muni, uniq("municipality"), "All municipalities");
     fillSelect(controls.facility, uniq("facility_type"), "All facility types");
     fillSelect(controls.status, uniq("status"), "All statuses");
+    if (controls.type && types.indexOf("PCP") !== -1) controls.type.value = "PCP";
 
-    ["district", "muni", "facility", "status"].forEach(function (k) {
+    /* map/tile pins and accents are coloured by project type — one dot per
+       type actually present in the data, plus the multi-project pin hint */
+    var typeLegend = document.getElementById("rs-type-legend");
+    if (typeLegend) {
+      typeLegend.innerHTML = types.map(function (t) {
+        return '<span><i class="dot" style="background:' + typeColor(t)[0] + '"></i>' + esc(t) + "</span>";
+      }).join("") +
+      '<span class="hint">Pins with a number group several projects at one site — click a pin to open a project</span>';
+    }
+
+    ["type", "district", "muni", "facility", "status"].forEach(function (k) {
       if (controls[k]) controls[k].addEventListener("change", function () {
         if (k === "district" && controls.muni) controls.muni.value = "";
         render();
@@ -444,7 +553,7 @@
     if (controls.q) controls.q.addEventListener("input", render);
     if (controls.reset) controls.reset.addEventListener("click", function () {
       if (controls.q) controls.q.value = "";
-      ["district", "muni", "facility", "status"].forEach(function (k) { if (controls[k]) controls[k].value = ""; });
+      ["type", "district", "muni", "facility", "status"].forEach(function (k) { if (controls[k]) controls[k].value = ""; });
       render();
     });
 
