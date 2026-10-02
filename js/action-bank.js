@@ -1,5 +1,5 @@
 /* ==========================================================================
-   action-bank.js — loads data/action_bank.csv, renders the action cards and
+   action-bank.js — loads data/action_bank.json, renders the action cards and
    powers the sector / city / status / scale-up filters and keyword search.
    Requires: data-loader.js and main.js. See README.md for the data workflow.
    ========================================================================== */
@@ -147,7 +147,7 @@
     btn.setAttribute("aria-expanded", open ? "true" : "false");
   });
 
-  loadCSV("data/action_bank.csv").then(function (rows) {
+  loadJSON("data/action_bank.json").then(function (rows) {
     actions = rows.filter(function (r) { return r.action_title; });
     actions.forEach(function (a) { a._scale = scaleCategory(a.scale_up_potential); });
     actions.sort(function (a, b) { return (parseFloat(a.display_order) || 0) - (parseFloat(b.display_order) || 0); });

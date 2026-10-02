@@ -1,2 +1,9 @@
 data/archive/
 data/test/
+
+# Editable masters stay local only — the website reads the generated JSON
+# (data/*.json). Run the matching build_*.py script after editing one of
+# these, then commit the regenerated JSON.
+data/*.xlsx
+
+__pycache__/

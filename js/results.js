@@ -1,5 +1,5 @@
 /* ==========================================================================
-   results.js (v2) — loads data/results_showcase.csv and renders the Results
+   results.js (v2) — loads data/results_showcase.json and renders the Results
    Showcase in two modes:
      · OVERVIEW — Moldova map + filterable photo-led project tiles
      · PROJECT PAGE — one project at a time (#project=ID), photographs up
@@ -42,11 +42,6 @@
     var n = parseFloat(v);
     if (isNaN(n) || n <= 0) return "";
     return "USD " + Math.round(n).toLocaleString("en-US");
-  }
-  function isImageLink(url) {
-    if (!url) return false;
-    if (/\.(jpe?g|png|webp|gif|avif)(\?.*)?$/i.test(url)) return true;
-    return url.indexOf("assets/") === 0; // repo-hosted photos
   }
   function orDash(v) { return v ? esc(v) : "—"; }
 
@@ -106,41 +101,90 @@
     return true;
   }
 
+  /* ---------------- lightbox ---------------- */
+  /* One shared full-screen viewer for every clickable photo on the project
+     page (single photos and the plain-photo gallery — the before/after
+     slider has its own drag-to-compare interaction and isn't wrapped in
+     this, to avoid the two gestures fighting over a click). Images that
+     share a data-lb-group open together, so prev/next moves within that set. */
+  var lb = null, lbList = [], lbIdx = 0;
+
+  function buildLightbox() {
+    var div = document.createElement("div");
+    div.className = "lb-overlay";
+    div.hidden = true;
+    div.innerHTML =
+      '<button type="button" class="lb-btn lb-close" aria-label="Close">' +
+        '<svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg>' +
+      "</button>" +
+      '<button type="button" class="lb-btn lb-prev" aria-label="Previous photo">' +
+        '<svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg>' +
+      "</button>" +
+      '<figure class="lb-figure"><img class="lb-img" alt="Project photo"><figcaption class="lb-count"></figcaption></figure>' +
+      '<button type="button" class="lb-btn lb-next" aria-label="Next photo">' +
+        '<svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6l6 6-6 6"/></svg>' +
+      "</button>";
+    document.body.appendChild(div);
+    div.querySelector(".lb-close").addEventListener("click", closeLightbox);
+    div.querySelector(".lb-prev").addEventListener("click", function () { lbStep(-1); });
+    div.querySelector(".lb-next").addEventListener("click", function () { lbStep(1); });
+    div.addEventListener("click", function (e) { if (e.target === div) closeLightbox(); });
+    document.addEventListener("keydown", function (e) {
+      if (!lb || lb.hidden) return;
+      if (e.key === "Escape") closeLightbox();
+      if (e.key === "ArrowLeft") lbStep(-1);
+      if (e.key === "ArrowRight") lbStep(1);
+    });
+    return div;
+  }
+
+  function lbShow(i) {
+    lbIdx = (i + lbList.length) % lbList.length;
+    var multi = lbList.length > 1;
+    lb.querySelector(".lb-img").src = lbList[lbIdx];
+    lb.querySelector(".lb-count").textContent = multi ? (lbIdx + 1) + " / " + lbList.length : "";
+    lb.querySelector(".lb-prev").hidden = !multi;
+    lb.querySelector(".lb-next").hidden = !multi;
+  }
+  function lbStep(delta) { lbShow(lbIdx + delta); }
+
+  function openLightbox(urls, startIdx) {
+    if (!lb) lb = buildLightbox();
+    lbList = urls;
+    lbShow(startIdx || 0);
+    lb.hidden = false;
+    document.body.classList.add("lb-open");
+  }
+  function closeLightbox() {
+    if (lb) { lb.hidden = true; document.body.classList.remove("lb-open"); }
+  }
+
+  document.addEventListener("click", function (e) {
+    var el = e.target.closest ? e.target.closest("[data-lb]") : null;
+    if (!el) return;
+    e.preventDefault();
+    var group = el.closest("[data-lb-group]");
+    var urls = group ?
+      Array.prototype.map.call(group.querySelectorAll("[data-lb]"), function (a) { return a.getAttribute("data-lb"); }) :
+      [el.getAttribute("data-lb")];
+    openLightbox(urls, urls.indexOf(el.getAttribute("data-lb")));
+  });
+
   /* ---------------- photos ---------------- */
-  /* Every project shows the same photo module: Before + After, each slot
-     being an embedded image, a link-out tile, or a placeholder. When both
-     sides are direct images, the module upgrades to a comparison slider.
-     A project can have several before/after shots (before_photo/after_photo
-     are "|"-joined lists) — photoState tracks which pair is on screen so
-     the viewer can step through them without leaving the slider. */
+  /* Every project shows the same photo module: Before + After, as an
+     interactive comparison slider when both exist, or whichever single
+     side it has. A project can have several before/after shots
+     (before_photo/after_photo are "|"-joined lists) — photoState tracks
+     which pair is on screen so the viewer can step through them. Projects
+     with no photos at all render nothing — no placeholder box. */
   function photoList(field) { return field ? field.split("|").filter(Boolean) : []; }
 
   var photoState = { before: [], after: [], idx: 0 };
 
-  function photoSlot(url, label, big) {
-    if (isImageLink(url)) {
-      return '<a class="ph-slot img" href="' + esc(url) + '" target="_blank" rel="noopener">' +
-        '<img src="' + esc(url) + '" alt="' + esc(label) + ' photo" loading="lazy">' +
-        '<span class="ph-cap">' + esc(label) + "</span></a>";
-    }
-    if (url) {
-      return '<a class="ph-slot linkout" href="' + esc(url) + '" target="_blank" rel="noopener">' +
-        '<svg viewBox="0 0 24 24" fill="none" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="2"/><circle cx="9" cy="10" r="1.6"/><path d="M21 15l-4.5-4.5L9 18"/></svg>' +
-        '<span class="ph-cap">' + esc(label) + " photos ↗</span>" +
-        (big ? '<span class="ph-note">Opens the photo folder (login may be required)</span>' : "") +
-      "</a>";
-    }
-    return '<div class="ph-slot pending">' +
-      '<svg viewBox="0 0 24 24" fill="none" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="2"/><circle cx="9" cy="10" r="1.6"/><path d="M21 15l-4.5-4.5L9 18"/></svg>' +
-      '<span class="ph-cap">' + esc(label) + "</span>" +
-      (big ? '<span class="ph-note">Photo pending</span>' : "") +
-    "</div>";
-  }
-
-  function photoModule(p, big) {
+  function photoModule(p) {
     var b = p.before_photo, a = p.after_photo;
-    if (isImageLink(b) && isImageLink(a)) {
-      return '<div class="ba' + (big ? " big" : "") + '" data-ba>' +
+    if (b && a) {
+      return '<div class="ba" data-ba>' +
         '<div class="ba-frame">' +
           '<img class="ba-after" src="' + esc(a) + '" alt="After works" loading="lazy">' +
           '<div class="ba-before-clip"><img class="ba-before" src="' + esc(b) + '" alt="Before works" loading="lazy"></div>' +
@@ -150,8 +194,13 @@
         '<input type="range" class="ba-range" min="0" max="100" value="50" aria-label="Compare before and after photos">' +
       "</div>";
     }
-    return '<div class="ph-pair' + (big ? " big" : "") + '">' +
-      photoSlot(b, "Before", big) + photoSlot(a, "After", big) + "</div>";
+    if (b || a) {
+      var url = b || a, label = b ? "Before" : "After";
+      return '<a class="ph-single" href="' + esc(url) + '" data-lb="' + esc(url) + '">' +
+        '<img src="' + esc(url) + '" alt="' + esc(label) + ' photo" loading="lazy">' +
+        '<span class="ph-cap">' + esc(label) + "</span></a>";
+    }
+    return "";
   }
 
   /* Plain documentation photos (an event, a finished site — no before/after
@@ -160,9 +209,9 @@
   function photoGallery(p) {
     var urls = p.photos ? p.photos.split("|").filter(Boolean) : [];
     if (!urls.length) return "";
-    return '<div class="rs-gallery">' +
+    return '<div class="rs-gallery" data-lb-group>' +
       urls.map(function (u) {
-        return '<a class="rs-gallery-item" href="' + esc(u) + '" target="_blank" rel="noopener">' +
+        return '<a class="rs-gallery-item" href="' + esc(u) + '" data-lb="' + esc(u) + '">' +
           '<img src="' + esc(u) + '" alt="Project photo" loading="lazy"></a>';
       }).join("") +
     "</div>";
@@ -184,7 +233,7 @@
         '<span class="step-count">' + (photoState.idx + 1) + " / " + total + "</span>" +
         '<button type="button" class="step-btn" id="ph-next" aria-label="Next photo pair">' + PH_NEXT_ICON + "</button>" +
       "</div>" : "";
-    return photoModule(pair, true) + nav;
+    return photoModule(pair) + nav;
   }
 
   function wirePhotoNav(container) {
@@ -206,12 +255,12 @@
   /* Returns the markup to embed in detailMain.innerHTML. When there's a
      before/after pair, it's just an empty slot — renderDetail fills it via
      renderPhotoPane() once the element actually exists in the DOM (needed
-     for the prev/next pair buttons to attach their click handlers). */
+     for the prev/next pair buttons to attach their click handlers). A
+     project with no photos at all contributes nothing. */
   function photoSection(p) {
     photoState = { before: photoList(p.before_photo), after: photoList(p.after_photo), idx: 0 };
     if (photoState.before.length || photoState.after.length) return '<div id="detail-photo"></div>';
-    if (p.photos) return photoGallery(p);
-    return photoModule(p, true); // neither — shows the familiar "pending" placeholders
+    return photoGallery(p); // "" when there's no gallery either
   }
 
   /* ---------------- overview table, grouped by district ---------------- */
@@ -315,6 +364,175 @@
       (p._lat != null ?
         '<a class="gmaps" href="https://www.openstreetmap.org/?mlat=' + p._lat + "&mlon=" + p._lon + "#map=16/" + p._lat + "/" + p._lon + '" target="_blank" rel="noopener">Open in OpenStreetMap ↗</a>' :
         '<span class="v">Coordinates not yet recorded</span>');
+  }
+
+  /* ---------------- admin boundaries (vector basemap, no tile API) ---------------- */
+  /* Ported from assets/map/moldova_map.html: raion/locality/commune
+     boundaries plus rivers and water bodies, drawn straight from embedded
+     GeoJSON (window.MOLDOVA_ADMIN, loaded by its own <script> tag) instead
+     of raster map tiles. More detail is swapped in automatically as you
+     zoom in — no API key, no tile requests. Project pins (markerPane,
+     z-index 600) always render above these boundaries (overlayPane,
+     z-index 400) regardless of draw order, so nothing extra is needed to
+     keep pins on top. */
+  function initAdminLayers(lmap) {
+    var G = window.MOLDOVA_ADMIN;
+    if (!G) return; // data file failed to load — the map still works, just blank background
+
+    /* Thin lines, light fills — per the UNHCR Data Visualization Guidelines
+       (keep the palette small, use the brand Grey/Blue tones). Raions use
+       the brand Grey (the most prominent layer, neutral so it doesn't
+       compete with the blue project pins); communes — the lightest/most
+       optional layer — use the lighter blue instead. */
+    var s1 = { color: "#BFBFBF", weight: 1, fillColor: "#BFBFBF", fillOpacity: .06 };    // ADM1 raions — Grey
+    var s2 = { color: "#4F9ED0", weight: .5, fillColor: "#8FC1E1", fillOpacity: .1 };    // ADM2 localities — Blue 03 / Blue 02
+    var s3 = { color: "#05568B", weight: .5, fillColor: "#0072BC", fillOpacity: .05, dashArray: "3 2" }; // communes — Blue 05 / Blue 04
+    var t1 = function (p) { return "<b>" + esc(p.Raion_name) + "</b><br>ADM1 · " + esc(p.ADM1_PCODE) + " · " + esc(p.ADM1_TYPE); };
+    var t2 = function (p) { return "<b>" + esc(p.Denumire) + "</b><br>" + esc(p.Raion_name) + " · " + esc(p.ADM2_PCODE); };
+    var t3 = function (p) { return "<b>" + esc(p.nm_ro) + "</b><br>" + esc(p.lau2_type) + " · code " + esc(p.lau2_codst); };
+    var A1 = [G.ADM1_0, G.ADM1_1], A2 = [G.ADM2_0, G.ADM2_1, G.ADM2_2], A3 = [G.COM_0, G.COM_1];
+
+    var infoEl = document.createElement("div");
+    infoEl.className = "am-info";
+
+    var cache = {};
+    function layerFor(key, data, st, tooltip) {
+      if (!cache[key]) {
+        cache[key] = L.geoJSON(data, {
+          style: function () { return st; },
+          onEachFeature: function (f, l) {
+            l.on("mouseover", function () {
+              l.setStyle({ weight: 2, color: "#FFC740", fillOpacity: .3 }); // Yellow accent
+              infoEl.innerHTML = tooltip(f.properties);
+              infoEl.hidden = false;
+            });
+            l.on("mouseout", function () { l.setStyle(st); infoEl.hidden = true; });
+            l.on("click", function () { lmap.fitBounds(l.getBounds(), { maxZoom: 14, padding: [40, 40] }); });
+          }
+        });
+      }
+      return cache[key];
+    }
+    function riverLayer(d, w, c) {
+      return L.geoJSON(d, {
+        style: { color: c || "#4F9ED0", weight: w },
+        onEachFeature: function (f, l) { if (f.properties.name) l.bindTooltip(f.properties.name, { sticky: true }); }
+      });
+    }
+    function waterLayer(d) {
+      return L.geoJSON(d, {
+        style: { color: "#4F9ED0", weight: .4, fillColor: "#8FC1E1", fillOpacity: .5 },
+        onEachFeature: function (f, l) {
+          var p = f.properties;
+          l.bindTooltip((p.name || "unnamed") + " · " + p.water, { sticky: true });
+        }
+      });
+    }
+    var RV = [riverLayer(G.RIV_A, 1.2), riverLayer(G.RIV_B, .6), riverLayer(G.RIV_C, .4, "#8FC1E1")];
+    var WT = [waterLayer(G.WAT_0), waterLayer(G.WAT_1), waterLayer(G.WAT_2)];
+
+    // default state: raions + communes on, localities/rivers/water off
+    var toggles = { raions: true, localities: false, communes: true, rivers: false, water: false };
+    var cur = { 1: null, 2: null, 3: null };
+    function setLayer(i, l) {
+      if (cur[i] === l) return;
+      if (cur[i]) lmap.removeLayer(cur[i]);
+      cur[i] = l;
+      if (l) l.addTo(lmap);
+    }
+
+    var statusEl = document.createElement("div");
+    statusEl.className = "am-status";
+
+    function refresh() {
+      var z = lmap.getZoom();
+      setLayer(1, toggles.raions ? layerFor("a1_" + (z >= 10 ? 1 : 0), A1[z >= 10 ? 1 : 0], s1, t1) : null);
+      var i2 = z >= 13 ? 2 : z >= 11 ? 1 : 0, i3 = z >= 12 ? 1 : 0;
+      setLayer(2, toggles.localities && z >= 8.5 ? layerFor("a2_" + i2, A2[i2], s2, t2) : null);
+      setLayer(3, toggles.communes && z >= 9 ? layerFor("c_" + i3, A3[i3], s3, t3) : null);
+
+      // thicken the raion outline once locality/commune borders are visible
+      // (from zoom 9) so it stays distinguishable from their thinner lines
+      s1.weight = z >= 9 ? 1.8 : 1;
+      if (cur[1]) { cur[1].setStyle(s1); cur[1].bringToFront(); }
+
+      var vr = [true, z >= 10, z >= 12], vw = [true, z >= 10, z >= 12];
+      RV.forEach(function (l, i) { lmap.removeLayer(l); if (toggles.rivers && vr[i]) l.addTo(lmap); });
+      WT.forEach(function (l, i) { lmap.removeLayer(l); if (toggles.water && vw[i]) l.addTo(lmap); });
+      RV.forEach(function (l) { if (lmap.hasLayer(l)) l.bringToFront(); });
+
+      var tier = i2 === 0 ? "low" : i2 === 1 ? "medium" : "full";
+      statusEl.textContent = "Zoom " + z + " · locality detail: " + tier + (z < 8.5 ? " (shows from zoom 9)" : "");
+    }
+
+    /* search index: raions, localities, communes — built once from the
+       detailed layers so results stay stable regardless of zoom tier */
+    var idx = [];
+    [[A1[1], function (p) { return p.Raion_name; }, "Raion"],
+     [A2[0], function (p) { return p.Denumire + " (" + p.Raion_name + ")"; }, "Locality"],
+     [A3[0], function (p) { return p.nm_ro + " (" + p.lau2_type + ")"; }, "Commune"]].forEach(function (entry) {
+      var data = entry[0], name = entry[1], kind = entry[2];
+      (data.features || []).forEach(function (f) { idx.push({ kind: kind, name: name(f.properties), feature: f }); });
+    });
+
+    var ctl = L.control({ position: "topright" });
+    ctl.onAdd = function () {
+      var div = L.DomUtil.create("div", "am-panel collapsed");
+      div.innerHTML =
+        '<button type="button" class="am-head">' +
+          '<b class="am-title">Moldova admin units</b>' +
+          '<svg class="am-chev" viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg>' +
+        "</button>" +
+        '<div class="am-body">' +
+          [["raions", "ADM1 – raions"], ["localities", "ADM2 – localities"], ["communes", "ADM2 – communes"],
+           ["rivers", "Rivers &amp; streams"], ["water", "Water bodies"]].map(function (row) {
+            var key = row[0], label = row[1];
+            return '<label><input type="checkbox" data-am="' + key + '"' + (toggles[key] ? " checked" : "") + "> " + label + "</label>";
+          }).join("") +
+          '<hr><input type="search" class="am-search" placeholder="Search raion / locality / commune">' +
+          '<div class="am-results"></div>' +
+        "</div>";
+      L.DomEvent.disableClickPropagation(div);
+      L.DomEvent.disableScrollPropagation(div);
+
+      div.querySelector(".am-head").addEventListener("click", function () {
+        div.classList.toggle("collapsed");
+      });
+
+      div.querySelectorAll("input[type=checkbox]").forEach(function (box) {
+        box.addEventListener("change", function () { toggles[box.getAttribute("data-am")] = box.checked; refresh(); });
+      });
+      var searchBox = div.querySelector(".am-search"), resultsEl = div.querySelector(".am-results");
+      searchBox.addEventListener("input", function (e) {
+        var v = e.target.value.trim().toLowerCase();
+        resultsEl.innerHTML = "";
+        if (v.length < 2) return;
+        var norm = function (s) { return s.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase(); };
+        idx.filter(function (x) { return norm(x.name).indexOf(norm(v)) !== -1; }).slice(0, 30).forEach(function (x) {
+          var row = document.createElement("div");
+          row.textContent = x.name + " · " + x.kind;
+          row.addEventListener("click", function () {
+            lmap.fitBounds(L.geoJSON(x.feature).getBounds(), { maxZoom: 14, padding: [40, 40] });
+            if (x.kind === "Commune") { toggles.communes = true; div.querySelector('[data-am="communes"]').checked = true; }
+            refresh();
+          });
+          resultsEl.appendChild(row);
+        });
+      });
+      return div;
+    };
+    ctl.addTo(lmap);
+
+    var infoCtl = L.control({ position: "bottomleft" });
+    infoCtl.onAdd = function () { infoEl.hidden = true; return infoEl; };
+    infoCtl.addTo(lmap);
+
+    var statusCtl = L.control({ position: "bottomright" });
+    statusCtl.onAdd = function () { return statusEl; };
+    statusCtl.addTo(lmap);
+
+    lmap.on("zoomend", refresh);
+    refresh();
   }
 
   /* ---------------- map ---------------- */
@@ -482,7 +700,7 @@
   });
 
   /* ---------------- boot ---------------- */
-  loadCSV("data/results_showcase.csv").then(function (rows) {
+  loadJSON("data/results_showcase.json").then(function (rows) {
     projects = rows.filter(function (r) { return r.project_name; });
     projects.forEach(function (p) {
       var la = parseFloat(p.latitude), lo = parseFloat(p.longitude);
@@ -512,12 +730,9 @@
       stats.hidden = false;
     }
 
-    /* map */
-    map = L.map(mapEl, { scrollWheelZoom: false, center: [47.1, 28.6], zoom: 7 });
-    L.tileLayer("https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png", {
-      attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>',
-      subdomains: "abcd", maxZoom: 18
-    }).addTo(map);
+    /* map — vector admin boundaries instead of raster tiles, see initAdminLayers() */
+    map = L.map(mapEl, { scrollWheelZoom: false, center: [47.1, 28.6], zoom: 7, zoomSnap: .5, minZoom: 6, maxZoom: 18 });
+    initAdminLayers(map);
     markerLayer = L.layerGroup().addTo(map);
 
     /* filters */

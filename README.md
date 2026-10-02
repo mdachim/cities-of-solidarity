@@ -45,20 +45,30 @@ The website is fully static. It uses HTML, CSS and JavaScript only. There is no 
 
 ## Data and documents
 
-The website uses CSV files in the `data/` folder for the live comparison and Action Bank content. Excel files are also included as human-editable source files.
+The website reads JSON files in the `data/` folder at runtime. Each one is generated from a matching Excel file, which is the human-editable master — the `.xlsx` files stay local only (see `.gitignore`) and are never published to the repository.
 
 ```text
-data/city_comparison.xlsx   Editable source file for city comparison data
-data/city_comparison.csv    Live file read by the website
+data/city_comparison.xlsx   Editable master (local only, gitignored)
+data/city_comparison.json   Live file read by the website
 
-data/action_bank.xlsx       Editable source file for Action Bank content
-data/action_bank.csv        Live file read by the website
+data/action_bank.xlsx       Editable master (local only, gitignored)
+data/action_bank.json       Live file read by the website
 
-data/results_showcase.xlsx  Editable source file for the Results Showcase
-data/results_showcase.csv   Live file read by the website
+data/results_showcase.xlsx  Editable master (local only, gitignored)
+data/results_showcase.json  Live file read by the website
 ```
 
-To update the data, edit the relevant Excel file, export the updated sheet as CSV, and replace the matching CSV file in the `data/` folder. For the Results Showcase, `python build_results_showcase.py` does the export automatically — see `SETUP_RESULTS_SHOWCASE.md` for the full workflow, field reference and photo options.
+To update the data: edit the relevant Excel file, then run its matching build script from the repository root, then commit and push the regenerated JSON (the `.xlsx` itself is never committed):
+
+```text
+python build_comparison_data.py    # data/city_comparison.xlsx  -> .json
+python build_action_bank.py        # data/action_bank.xlsx      -> .json
+python build_results_showcase.py   # data/results_showcase.xlsx -> .json
+```
+
+All three require `pip install openpyxl`. For the Results Showcase, `build_results_showcase.py` also auto-detects project photos from `assets/photos/<project_id>/` — see `assets/photos/README.md` and `SETUP_RESULTS_SHOWCASE.md`.
+
+`seed_action_bank.py` and `seed_comparison_data.py` are historical one-time scripts that originally generated the `.xlsx` masters from hand-coded data — they are not part of the live pipeline and should not be re-run (doing so would overwrite any manual edits made in Excel since).
 
 The Local Action Plan download buttons point to fixed files in the `documents/` folder. To publish or replace a plan, upload the final PDF using the same file name, for example:
 
@@ -72,7 +82,7 @@ The same naming structure is used for Bălți, Chișinău and Cahul.
 
 ## Running the website locally
 
-Because some pages load CSV files with JavaScript, the website should be opened through a small local server rather than directly from the file system.
+Because some pages load JSON files with JavaScript, the website should be opened through a small local server rather than directly from the file system.
 
 Using Python:
 
@@ -93,9 +103,9 @@ Alternatively, the site can be previewed with the Live Server extension in Visua
 
 - All links are relative, so the website can run either from a root domain or from a GitHub Pages project path.
 - The `.nojekyll` file is included so GitHub Pages serves the static files directly.
-- The Results Showcase map uses Leaflet with free CARTO/OpenStreetMap tiles loaded from public CDNs — no API key or account is required.
+- The Results Showcase map uses Leaflet with a vector base layer (Moldova's administrative boundaries, from `assets/map/moldova_admin_data.js`) instead of raster map tiles — no API key or account is required.
 - Fonts are loaded from Google Fonts. If offline hosting is required, fonts can be self-hosted or replaced with system fonts.
-- The included Python scripts were used to prepare initial data files and are not required for the live website.
+- The `build_*.py` scripts regenerate the published JSON from the local Excel masters (see "Data and documents" above) — they aren't required to just serve the already-published site, only to publish new edits.
 
 ## Maintainer note
 

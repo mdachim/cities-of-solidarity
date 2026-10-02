@@ -1,6 +1,6 @@
 /* ==========================================================================
    comparison.js — builds the "Four Cities, Four Inclusion Pathways" charts
-   from data/city_comparison.csv (see README.md for how to edit the data),
+   from data/city_comparison.json (see README.md for how to edit the data),
    then drives the chapter navigation and progress bar.
    Requires: data-loader.js and main.js.
    ========================================================================== */
@@ -229,7 +229,7 @@
   }
 
   /* ---------- load & render everything ---------- */
-  loadCSV("data/city_comparison.csv").then(function (rows) {
+  loadJSON("data/city_comparison.json").then(function (rows) {
     var groups = groupRows(rows, "indicator_group");
     renderHeadline(groups.headline);
     renderLollipop(groups.employment, "lolli-employment");
@@ -254,9 +254,27 @@
   var bar = document.getElementById("progress");
   if (nav) {
     var links = nav.querySelectorAll('a[href^="#"]');
+    var scrollBox = nav.querySelector(".links");
     var sections = Array.prototype.map.call(links, function (a) {
       return document.querySelector(a.getAttribute("href"));
     });
+
+    /* left/right buttons for the horizontally-scrolling chapter strip —
+       it overflows on narrower screens with no visible scrollbar */
+    var prevBtn = document.getElementById("chap-prev"), nextBtn = document.getElementById("chap-next");
+    function updateScrollBtns() {
+      if (!scrollBox) return;
+      if (prevBtn) prevBtn.disabled = scrollBox.scrollLeft <= 1;
+      if (nextBtn) nextBtn.disabled = scrollBox.scrollLeft >= scrollBox.scrollWidth - scrollBox.clientWidth - 1;
+    }
+    if (prevBtn) prevBtn.addEventListener("click", function () {
+      scrollBox.scrollBy({ left: -160, behavior: window.CoS.reducedMotion ? "auto" : "smooth" });
+    });
+    if (nextBtn) nextBtn.addEventListener("click", function () {
+      scrollBox.scrollBy({ left: 160, behavior: window.CoS.reducedMotion ? "auto" : "smooth" });
+    });
+    if (scrollBox) scrollBox.addEventListener("scroll", updateScrollBtns, { passive: true });
+
     function onScroll() {
       var y = window.scrollY || document.documentElement.scrollTop;
       if (bar) {
@@ -268,11 +286,12 @@
         if (sections[i] && sections[i].getBoundingClientRect().top <= window.innerHeight * 0.38) current = i;
       }
       Array.prototype.forEach.call(links, function (a, i) { a.classList.toggle("active", i === current); });
-      if (current >= 0) {
-        var active = links[current], box = active.parentElement;
-        var r = active.offsetLeft - box.clientWidth / 2 + active.clientWidth / 2;
-        if (box.scrollTo) box.scrollTo({ left: r, behavior: window.CoS.reducedMotion ? "auto" : "smooth" });
+      if (current >= 0 && scrollBox) {
+        var active = links[current];
+        var r = active.offsetLeft - scrollBox.clientWidth / 2 + active.clientWidth / 2;
+        if (scrollBox.scrollTo) scrollBox.scrollTo({ left: r, behavior: window.CoS.reducedMotion ? "auto" : "smooth" });
       }
+      updateScrollBtns();
     }
     var ticking = false;
     window.addEventListener("scroll", function () {

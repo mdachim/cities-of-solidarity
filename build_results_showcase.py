@@ -1,11 +1,11 @@
-"""Regenerate data/results_showcase.csv from data/results_showcase.xlsx.
+"""Regenerate data/results_showcase.json from data/results_showcase.xlsx.
 
 Usage (from the repository root):
     python build_results_showcase.py
 
-The website reads the CSV at runtime; the Excel file is the human-editable
-master. Run this after editing the Excel file, then commit and push both
-files. Requires the openpyxl package:  pip install openpyxl
+The website reads the JSON at runtime; the Excel file is the human-editable
+master (not published — see .gitignore). Run this after editing the Excel
+file, then commit and push the JSON. Requires openpyxl: pip install openpyxl
 
 Photos: the Excel Before/After Photo columns are ignored entirely — the
 website only ever shows photos placed in assets/photos/<project_id>/. Any
@@ -13,11 +13,11 @@ image there whose filename contains "before" / "after" (there can be more
 than one of each — the project page lets you flip through the pairs) fills
 before_photo/after_photo; every other image in that folder (no before/after
 in its name — e.g. plain event/documentation photos) is collected into a
-separate "photos" gallery column. A project with nothing in its folder
+separate "photos" gallery field. A project with nothing in its folder
 simply shows no photo. See assets/photos/README.md.
 """
-import csv
 import datetime as dt
+import json
 import re
 import sys
 from pathlib import Path
@@ -28,12 +28,12 @@ except ImportError:
     sys.exit("openpyxl is not installed. Run:  pip install openpyxl")
 
 XLSX = "data/results_showcase.xlsx"
-CSV_OUT = "data/results_showcase.csv"
+JSON_OUT = "data/results_showcase.json"
 SHEET = "Results Showcase"
 PHOTOS_DIR = Path("assets/photos")
 PHOTO_EXTS = (".jpg", ".jpeg", ".png", ".webp", ".gif", ".avif")
 
-# CSV columns, in order, matched to the Excel columns A..U
+# Row fields, in order, matched to the Excel columns A..U
 COLS = ["project_id", "project_type", "project_name", "district", "municipality", "address",
         "latitude", "longitude", "facility_type", "ownership", "scope_of_works",
         "impact", "implementation_modality", "total_investment_usd",
@@ -41,8 +41,10 @@ COLS = ["project_id", "project_type", "project_name", "district", "municipality"
         "before_photo", "after_photo", "remarks"]
 
 # "photos" isn't an Excel column — it's computed entirely from the
-# assets/photos/<project_id>/ folder and appended to the CSV.
-CSV_FIELDS = COLS + ["photos"]
+# assets/photos/<project_id>/ folder and appended to each record. Every
+# field is kept as a string (matching the old CSV output exactly), so the
+# website's JS needs no changes regardless of which format feeds it.
+OUT_FIELDS = COLS + ["photos"]
 
 MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun",
           "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
@@ -131,14 +133,13 @@ def main():
         if gallery:
             galleries_found += 1
 
-        rows_out.append(record)
+        rows_out.append({field: record[field] for field in OUT_FIELDS})
 
-    with open(CSV_OUT, "w", newline="", encoding="utf-8") as f:
-        writer = csv.DictWriter(f, fieldnames=CSV_FIELDS)
-        writer.writeheader()
-        writer.writerows(rows_out)
+    with open(JSON_OUT, "w", encoding="utf-8") as f:
+        json.dump(rows_out, f, ensure_ascii=False, indent=1)
+        f.write("\n")
 
-    print(f"Wrote {len(rows_out)} projects to {CSV_OUT} "
+    print(f"Wrote {len(rows_out)} projects to {JSON_OUT} "
           f"({photos_found} before/after photo(s), {galleries_found} project(s) with a photo gallery, "
           f"auto-detected from {PHOTOS_DIR}/)")
 

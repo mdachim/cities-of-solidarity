@@ -1,65 +1,22 @@
 /* ==========================================================================
-   data-loader.js — shared helpers for loading the CSV data files.
-   The website reads /data/*.csv at runtime (the .xlsx files are the
-   human-editable masters; see README.md for the update workflow).
+   data-loader.js — shared helpers for loading the JSON data files.
+   The website reads /data/*.json at runtime — each one an array of row
+   objects with the same field names as its Excel master. The .xlsx files
+   are the human-editable masters (not published — see .gitignore); each
+   has a matching build_*.py script that regenerates the JSON from it.
+   See README.md for the update workflow.
    ========================================================================== */
 
 /**
- * Minimal RFC-4180-style CSV parser.
- * Handles quoted fields, embedded commas, embedded newlines and "" escapes.
- * Returns an array of row objects keyed by the header row.
+ * Fetch and parse a JSON data file. Relative URLs keep the site working
+ * when GitHub Pages serves it from a project sub-path. Rejects with a
+ * helpful message when opened via file:// (see README).
  */
-function parseCSV(text) {
-  var rows = [];
-  var row = [];
-  var field = "";
-  var inQuotes = false;
-  // Normalise BOM
-  if (text.charCodeAt(0) === 0xFEFF) text = text.slice(1);
-
-  for (var i = 0; i < text.length; i++) {
-    var ch = text[i];
-    if (inQuotes) {
-      if (ch === '"') {
-        if (text[i + 1] === '"') { field += '"'; i++; }   // escaped quote
-        else { inQuotes = false; }
-      } else {
-        field += ch;
-      }
-    } else {
-      if (ch === '"') inQuotes = true;
-      else if (ch === ",") { row.push(field); field = ""; }
-      else if (ch === "\n" || ch === "\r") {
-        if (ch === "\r" && text[i + 1] === "\n") i++;      // CRLF
-        row.push(field); field = "";
-        if (row.length > 1 || row[0] !== "") rows.push(row);
-        row = [];
-      } else {
-        field += ch;
-      }
-    }
-  }
-  if (field !== "" || row.length) { row.push(field); rows.push(row); }
-
-  if (!rows.length) return [];
-  var header = rows[0].map(function (h) { return h.trim(); });
-  return rows.slice(1).map(function (r) {
-    var obj = {};
-    header.forEach(function (h, idx) { obj[h] = (r[idx] !== undefined ? r[idx] : "").trim(); });
-    return obj;
-  });
-}
-
-/**
- * Fetch and parse a CSV file. Relative URLs keep the site working when
- * GitHub Pages serves it from a project sub-path.
- * Rejects with a helpful message when opened via file:// (see README).
- */
-function loadCSV(url) {
+function loadJSON(url) {
   return fetch(url).then(function (res) {
     if (!res.ok) throw new Error("HTTP " + res.status + " while loading " + url);
-    return res.text();
-  }).then(parseCSV).catch(function (err) {
+    return res.json();
+  }).catch(function (err) {
     if (location.protocol === "file:") {
       throw new Error(
         "Data files cannot be loaded when the page is opened directly from disk (file://). " +
